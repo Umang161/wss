@@ -1,0 +1,25 @@
+export const config = {
+  port: Number(process.env.PORT) || 8080,
+
+  authTimeoutSeconds: Number(process.env.AUTH_TIMEOUT_SECONDS) || 5,
+  idleTimeoutSeconds: Number(process.env.IDLE_TIMEOUT_SECONDS) || 90,
+  maxConnectionLifetimeSeconds:
+    Number(process.env.MAX_CONNECTION_LIFETIME_SECONDS) || 30 * 60,
+  maxUnauthenticatedPerIp: Number(process.env.MAX_UNAUTH_PER_IP) || 10,
+
+  jwtSecret: process.env.JWT_SECRET || process.env.JWT_PUBLIC_KEY || 'change-me',
+  jwtIssuer: process.env.JWT_ISSUER,
+  jwtAudience: process.env.JWT_AUDIENCE,
+
+  /** Base URL of the AI agent HTTP API (no trailing slash). */
+  aiServerAddress: process.env.AI_SERVER_ADDRESS || 'https://25a5-106-219-176-243.ngrok-free.app',
+
+  /** Timeout in ms for AI HTTP calls. */
+  aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS) || 30_000,
+
+  /** Base URL of the CRUD / HITL backend API (no trailing slash). */
+  crudServerAddress: process.env.CRUD_SERVER_ADDRESS || 'https://api.zoft.ai',
+
+  /** Timeout in ms for CRUD API HTTP calls. */
+  crudRequestTimeoutMs: Number(process.env.CRUD_REQUEST_TIMEOUT_MS) || 10_000,
+} as const;

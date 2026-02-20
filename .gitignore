@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment and secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Logs and runtime
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Optional: Supabase local (if you add it later)
+# supabase/.temp/
+# .supabase/
