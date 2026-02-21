@@ -2,6 +2,7 @@
  * WebSocket gateway: authenticate sockets, enforce permissions,
  * delegate events to the routing orchestrator.
  */
+import 'dotenv/config';
 import http from 'http';
 import { config } from './config';
 import { verifyAndDecode } from './auth';
@@ -26,6 +27,7 @@ function sendEnvelope(ws: WebSocket, envelope: EventEnvelope): void {
 }
 
 function closeWithAuthError(ws: WebSocket, message: string): void {
+  console.warn('[WS] Closing connection:', message);
   sendEnvelope(ws, { type: 'auth_error', version: 1, payload: { message } });
   ws.close(4001, message);
 }
@@ -34,17 +36,13 @@ function closeWithAuthError(ws: WebSocket, message: string): void {
 
 wss.on('connection', (socket: ExtendedWebSocket) => {
   const now = Date.now();
+  console.log('[WS] Client connected');
 
-  socket.isAlive = true;
   socket.data = {
     authState: 'UNAUTHENTICATED',
     connectedAt: now,
     lastActivityAt: now,
   };
-
-  socket.on('pong', () => {
-    socket.isAlive = true;
-  });
 
   socket.on('message', (raw) => {
     let envelope: EventEnvelope;
@@ -73,7 +71,11 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
     // ── Unauthenticated phase ─────────────────────────────────────
     if (data.authState === 'UNAUTHENTICATED') {
       if (!isAllowedBeforeAuth(envelope.type)) {
-        closeWithAuthError(socket, 'Only auth or ping allowed before authentication');
+        sendEnvelope(socket, {
+          type: 'error',
+          version: 1,
+          payload: { message: 'Send auth first. Only auth or ping allowed before authentication.' },
+        });
         return;
       }
 
@@ -138,7 +140,8 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
     });
   });
 
-  socket.on('close', () => {
+  socket.on('close', (code, reason) => {
+    console.log('[WS] Client disconnected', code, reason?.toString() || '');
     routingOnSocketClose(socket);
   });
 
@@ -147,17 +150,13 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
   });
 });
 
-// ── Heartbeat ───────────────────────────────────────────────────────
+// ── Heartbeat (keepalive only; do not disconnect on missed pong) ───
+// Some clients/proxies don't respond to WS pings; terminating would drop them.
 
 const heartbeatInterval = setInterval(() => {
   wss.clients.forEach((s) => {
     const socket = s as ExtendedWebSocket;
-    if (socket.isAlive === false) {
-      socket.terminate();
-      return;
-    }
-    socket.isAlive = false;
-    socket.ping();
+    if (socket.readyState === 1) socket.ping();
   });
 }, 30000);
 
@@ -165,6 +164,8 @@ wss.on('close', () => {
   clearInterval(heartbeatInterval);
 });
 
-server.listen(PORT, () => {
-  console.log(`WebSocket gateway listening on ws://localhost:${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+
+server.listen(PORT, HOST, () => {
+  console.log(`WebSocket gateway listening on ws://${HOST}:${PORT}`);
 });
