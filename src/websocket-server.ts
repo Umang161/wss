@@ -12,6 +12,7 @@ import { canSendEvent, isAllowedBeforeAuth } from './permissions';
 import {
   handleEvent,
   registerHumanAgentSocket,
+  pushAgentClaimedSessions,
   onSocketClose as routingOnSocketClose,
 } from './routing';
 
@@ -29,22 +30,28 @@ function sendEnvelope(ws: WebSocket, envelope: EventEnvelope): void {
 function closeWithAuthError(ws: WebSocket, message: string): void {
   console.warn('[WS] Closing connection:', message);
   sendEnvelope(ws, { type: 'auth_error', version: 1, payload: { message } });
-  ws.close(4001, message);
+  // WebSocket close reason max 123 bytes (UTF-8)
+  const reason = Buffer.from(message, 'utf8').byteLength > 123
+    ? message.slice(0, 60) + '…'
+    : message;
+  ws.close(4001, reason);
 }
 
 // ── Connection handler ──────────────────────────────────────────────
 
 wss.on('connection', (socket: ExtendedWebSocket) => {
   const now = Date.now();
-  console.log('[WS] Client connected');
+  const socketId = `ws-${Math.random().toString(36).slice(2, 10)}`;
+  console.log('[WS] Client connected', socketId);
 
   socket.data = {
+    socketId,
     authState: 'UNAUTHENTICATED',
     connectedAt: now,
     lastActivityAt: now,
   };
 
-  socket.on('message', (raw) => {
+  socket.on('message', async (raw) => {
     let envelope: EventEnvelope;
     try {
       const parsed = JSON.parse(raw.toString());
@@ -87,16 +94,27 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
           return;
         }
         try {
-          const context = verifyAndDecode(token);
+          const context = await verifyAndDecode(token);
           data.authState = 'AUTHENTICATED';
           data.context = context;
           data.token = token;
 
           if (context.role === 'human_agent') {
+            const tokenPreview = token.length > 50 ? `${token.slice(0, 30)}…${token.slice(-15)}` : token;
+            console.log(`[WS] Agent auth token received: ${tokenPreview}`);
             registerHumanAgentSocket(socket, context);
+            const workspaces = (context.workspace_ids?.length ? context.workspace_ids : (context.tenant_id ? [context.tenant_id] : [])) as string[];
+            const wsList = workspaces.length ? workspaces.map((w) => w.slice(0, 8) + '…').join(', ') : '(none)';
+            console.log(`[WS] Agent joined broadcast list: socketId=${data.socketId ?? '?'} user_id=${context.user_id.slice(0, 8)}… workspaces=[${wsList}]`);
+            pushAgentClaimedSessions(socket, context, token).catch((err) => {
+              console.warn('[WS] Failed to push agent claimed sessions:', err);
+            });
+          } else if (context.role === 'user') {
+            const wsList = context.tenant_id ? context.tenant_id : '(none)';
+            console.log(`[WS] Embedded chat (user) connected: socketId=${data.socketId ?? '?'} workspace=${wsList}`);
           }
 
-          sendEnvelope(socket, { type: 'auth_ok', version: 1, payload: {} });
+          sendEnvelope(socket, { type: 'auth_ok', version: 1, payload: { socket_id: data.socketId } });
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Invalid token';
           closeWithAuthError(socket, message);
@@ -141,7 +159,8 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
   });
 
   socket.on('close', (code, reason) => {
-    console.log('[WS] Client disconnected', code, reason?.toString() || '');
+    const sid = (socket as ExtendedWebSocket).data?.socketId;
+    console.log('[WS] Client disconnected', sid ? `socketId=${sid}` : '', code, reason?.toString() || '');
     routingOnSocketClose(socket);
   });
 

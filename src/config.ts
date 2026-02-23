@@ -22,4 +22,16 @@ export const config = {
 
   /** Timeout in ms for CRUD API HTTP calls. */
   crudRequestTimeoutMs: Number(process.env.CRUD_REQUEST_TIMEOUT_MS) || 10_000,
+
+  /** Supabase project URL for JWT verification (e.g. https://xxx.supabase.co). Enables Supabase JWT auth for helpdesk. */
+  supabaseUrl: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
+
+  /** Supabase anon key (required for auth API calls). From Project Settings > API. */
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY,
+
+  /** Supabase service role key (for server-side DB queries by email). From Project Settings > API. */
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY,
+
+  /** Supabase JWT secret (from Project Settings > API). Required for legacy Supabase projects where JWKS returns empty keys. */
+  supabaseJwtSecret: process.env.SUPABASE_JWT_SECRET,
 } as const;

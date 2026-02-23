@@ -6,12 +6,9 @@
 import { config } from './config';
 import type { HitlSession, HitlQueueResponse, HitlSessionsResponse } from './types';
 
-const CRUD_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsImtpZCI6IndjWDBiOE9sbXZjWitKdjkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2ptenl5cW5veWR5c21lY2Fvbm9kLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJlMjM4OTUxZS1kNWFlLTQyMWYtYjcxYi0yODRkMGUzMzBjODQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcxNTg2MzAzLCJpYXQiOjE3NzE1ODI3MDMsImVtYWlsIjoiaXRfZXhlY3V0aXZlQGNvbHl0aWNzLmluIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NzE1ODI3MDN9XSwic2Vzc2lvbl9pZCI6ImU5OGI2NzBiLWU3OGItNGE5Ny05Mjk5LTNlMjBhZjdmYzBmOSIsImlzX2Fub255bW91cyI6ZmFsc2V9.AP3TjPFCX-MQLJV5REq_qlVY8JpIXCl56rLsifIGzrY';
-
 async function hitlFetch<T>(
   path: string,
-  _token: string,
+  token: string,
   options: RequestInit = {},
 ): Promise<T> {
   const url = `${config.crudServerAddress}${path}`;
@@ -26,7 +23,7 @@ async function hitlFetch<T>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${CRUD_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         ...(options.headers as Record<string, string> | undefined),
       },
       signal: controller.signal,

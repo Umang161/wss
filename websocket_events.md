@@ -144,7 +144,7 @@ A message from the AI or from a human agent.
   "version": 1,
   "payload": {
     "message": "The capital of Rajasthan is Jaipur.",
-    "sender_type": "ai_agent",
+    "role": "ai_agent",
   },
   "meta": {
     "conversation_id": "conv-uuid",
@@ -156,7 +156,7 @@ A message from the AI or from a human agent.
 | Field | Values | Notes |
 |-------|--------|-------|
 | `payload.message` | string | The message text |
-| `payload.sender_type` | `"ai_agent"` or `"human_agent"` | Who sent it |
+| `payload.role` | `"user"`, `"ai_agent"`, or `"human_agent"` | Who sent it |
 | `payload.sender_id` | string (only for `human_agent`) | The CS agent's profile ID |
 
 #### `conversation_status_update` — Conversation state changed
@@ -327,8 +327,8 @@ Sent to the agent who accepted the ticket. Contains the entire conversation hist
       "ended_at": null
     },
     "messages": [
-      { "id": "0", "sender_type": "user", "content": "Hi, I need help" },
-      { "id": "1", "sender_type": "ai_agent", "content": "Let me connect you with a human agent." }
+      { "id": "0", "role": "user", "content": "Hi, I need help" },
+      { "id": "1", "role": "ai_agent", "content": "Let me connect you with a human agent." }
     ]
   },
   "meta": {
@@ -348,7 +348,7 @@ Received when the user sends a message during an active HITL session.
   "version": 1,
   "payload": {
     "message": "Can you check order #12345?",
-    "sender_type": "user",
+    "role": "user",
     "sender_id": "user-uuid"
   },
   "meta": {
@@ -390,7 +390,7 @@ CHAT UI (user)                    SERVER                    DASHBOARD (human_age
     message_send ──────────────────►
     ◄──────────────────── ai_thinking
     ◄────────────────── message_receive
-                        (sender_type: ai_agent)
+                        (role: ai_agent)
 
 2. AI HANDS OFF → QUEUED
     ◄──── conversation_status_update                   conversation_queued ────►
@@ -417,7 +417,7 @@ CHAT UI (user)                    SERVER                    DASHBOARD (human_age
     message_send ──────────────────►
     ◄──────────────────── ai_thinking
     ◄────────────────── message_receive
-                        (sender_type: ai_agent)
+                        (role: ai_agent)
 ```
 
 ---

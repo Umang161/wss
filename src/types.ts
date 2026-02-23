@@ -5,7 +5,8 @@
 /** Only two WS client types; AI is an HTTP API, not a socket. */
 export type Role = 'user' | 'human_agent';
 
-export type SenderType = 'user' | 'ai_agent' | 'human_agent';
+/** Role of the sender in conversation history (user, ai_agent, human_agent). */
+export type MessageRole = 'user' | 'ai_agent' | 'human_agent';
 
 export type EventType =
   | 'auth'
@@ -20,7 +21,9 @@ export type EventType =
   | 'conversation_picked'
   | 'conversation_status_update'
   | 'conversation_history'
+  | 'session_history'
   | 'agent_pick'
+  | 'session_history_request'
   | 'conversation_complete'
   | 'error';
 
@@ -46,11 +49,15 @@ export interface SocketContext {
   role: Role;
   permissions: string[];
   authenticatedAt: number;
+  /** All workspace IDs the agent belongs to (human_agent only). Enables broadcast to all dashboards. */
+  workspace_ids?: string[];
 }
 
 export type SocketAuthState = 'UNAUTHENTICATED' | 'AUTHENTICATED';
 
 export interface SocketData {
+  /** Short ID for logging (set on connection). */
+  socketId?: string;
   authState: SocketAuthState;
   context?: SocketContext;
   /** Raw JWT kept for forwarding to CRUD API calls. */
@@ -66,7 +73,7 @@ export interface SocketData {
 
 export interface AiChatRequest {
   user_input: string;
-  conversation_history: Array<{ sender_type: SenderType; content: string }>;
+  conversation_history: Array<{ role: MessageRole; content: string }>;
   chat_agent_id: string;
   conversation_id: string;
 }

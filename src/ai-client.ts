@@ -36,7 +36,17 @@ export async function chatWithAi(
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error('AI API request timed out');
     }
-    throw err;
+    // Rethrow our own HTTP error (from !res.ok)
+    if (err instanceof Error && err.message.startsWith('AI API returned')) {
+      throw err;
+    }
+    const e = err instanceof Error ? err : new Error(String(err));
+    const cause = (e as { cause?: unknown }).cause;
+    const detail = cause instanceof Error ? cause.message : e.message;
+    throw new Error(
+      `AI API unreachable (${url}): ${detail}. ` +
+      'For local dev, set AI_SERVER_ADDRESS=http://localhost:8001 and run zoft_conversational_agent.'
+    );
   } finally {
     clearTimeout(timeout);
   }
