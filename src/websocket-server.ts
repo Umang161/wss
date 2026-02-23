@@ -114,7 +114,12 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
             console.log(`[WS] Embedded chat (user) connected: socketId=${data.socketId ?? '?'} workspace=${wsList}`);
           }
 
-          sendEnvelope(socket, { type: 'auth_ok', version: 1, payload: { socket_id: data.socketId } });
+          const tenantId = context.tenant_id || (context.workspace_ids?.[0] as string | undefined) || '';
+          sendEnvelope(socket, {
+            type: 'auth_ok',
+            version: 1,
+            payload: { socket_id: data.socketId, tenant_id: tenantId },
+          });
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Invalid token';
           closeWithAuthError(socket, message);

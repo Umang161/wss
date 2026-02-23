@@ -688,6 +688,16 @@ async function handleConversationComplete(
   state.assignedAgentId = undefined;
   agentConversations.delete(cid);
 
+  broadcastToWorkspaceAgents(state.workspaceId, {
+    type: 'conversation_ended',
+    version: 1,
+    payload: {
+      conversation_id: cid,
+      session,
+    },
+    meta: { conversation_id: cid, ts: Date.now() },
+  });
+
   const userSocket = userSockets.get(cid);
   if (userSocket && userSocket.readyState === 1) {
     send(userSocket, {
@@ -704,7 +714,7 @@ async function handleConversationComplete(
     const chatAgentId = state.chatAgentId ?? session.chat_agent_id;
     if (chatAgentId) {
       const handoffCompletePrompt =
-        'The human support agent has just ended the session. Based on the conversation history, send a brief, friendly follow-up message (1-2 sentences) to the user. Acknowledge the topic if you can infer it (e.g. billing sync, order issue) and ask if they need anything else. Be warm and professional. Do not use tools or trigger handoff.';
+        'The human support agent has just ended the session. Based on the conversation history, send a brief, friendly follow-up message (1-2 sentences) to the user. Acknowledge the topic if you can infer it (e.g. billing sync, order issue) and ask if they need anything else. Be warm and professional. Do not use tools or trigger handoff. In the end, ask if there human handoff was helpul.';
       chatWithAi({
         user_input: handoffCompletePrompt,
         conversation_history: state.messageHistory,

@@ -25,6 +25,7 @@ export type EventType =
   | 'agent_pick'
   | 'session_history_request'
   | 'conversation_complete'
+  | 'conversation_ended'
   | 'error';
 
 export interface EventEnvelope<T = unknown> {

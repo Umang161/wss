@@ -21,6 +21,7 @@ const SEND: Record<EventType, Role[]> = {
   agent_pick:                  ['human_agent'],
   session_history_request:    ['human_agent'],
   conversation_complete:       ['human_agent'],
+  conversation_ended:         [],
   error:                       [],
 };
 
