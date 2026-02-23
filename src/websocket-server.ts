@@ -17,7 +17,13 @@ import {
 } from './routing';
 
 const PORT = config.port;
-const server = http.createServer();
+
+// Handle normal HTTP requests (required for Nginx proxy - otherwise 504 on health checks)
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+});
+
 const wss = new WebSocketServer({ server });
 
 type ExtendedWebSocket = WebSocket & { isAlive?: boolean; data?: SocketData };
