@@ -252,23 +252,12 @@ function getOrCreateState(
  */
 async function syncStateIfNeeded(
   state: ConversationState,
-  cid: string,
-  token: string,
+  _cid: string,
+  _token: string,
 ): Promise<void> {
   if (!state.needsSync) return;
   state.needsSync = false;
-
-  try {
-    const session = await getHitlSession(cid, token);
-    if (session.status === 'waiting') {
-      state.mode = 'waiting';
-    } else if (session.status === 'accepted') {
-      state.mode = 'accepted';
-      state.assignedAgentId = session.assigned_cs_profile_id ?? undefined;
-    }
-  } catch {
-    // 404 or network error → no active HITL session, stay in AI mode.
-  }
+  // HITL GET sync disabled: no longer calling getHitlSession on first message.
 }
 
 // ── Main event dispatcher ───────────────────────────────────────────

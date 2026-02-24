@@ -12,7 +12,6 @@ import { canSendEvent, isAllowedBeforeAuth } from './permissions';
 import {
   handleEvent,
   registerHumanAgentSocket,
-  pushAgentClaimedSessions,
   onSocketClose as routingOnSocketClose,
 } from './routing';
 
@@ -116,9 +115,7 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
             const workspaces = (context.workspace_ids?.length ? context.workspace_ids : (context.tenant_id ? [context.tenant_id] : [])) as string[];
             const wsList = workspaces.length ? workspaces.map((w) => w.slice(0, 8) + '…').join(', ') : '(none)';
             console.log(`[WS] Agent joined broadcast list: socketId=${data.socketId ?? '?'} user_id=${context.user_id.slice(0, 8)}… workspaces=[${wsList}]`);
-            pushAgentClaimedSessions(socket, context, token).catch((err) => {
-              console.warn('[WS] Failed to push agent claimed sessions:', err);
-            });
+            // HITL GET disabled: no longer fetching claimed sessions on agent auth.
           } else if (context.role === 'user') {
             const wsList = context.tenant_id ? context.tenant_id : '(none)';
             console.log(`[WS] Embedded chat (user) connected: socketId=${data.socketId ?? '?'} workspace=${wsList}`);
