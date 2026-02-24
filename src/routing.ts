@@ -270,13 +270,20 @@ export async function handleEvent(
   const ctx = data.context!;
 
   switch (envelope.type) {
-    case 'message_send':
-      if (ctx.role === 'user') {
-        await handleUserMessage(envelope, socket, data);
-      } else if (ctx.role === 'human_agent') {
+    case 'message_send': {
+      const cid = envelope.meta?.conversation_id;
+      const state = cid ? conversationStates.get(cid) : undefined;
+      const isAgentInActiveHitl =
+        ctx.role === 'human_agent' &&
+        state?.mode === 'accepted' &&
+        state.assignedAgentId === ctx.user_id;
+      if (isAgentInActiveHitl) {
         await handleAgentMessage(envelope, socket, data);
+      } else {
+        await handleUserMessage(envelope, socket, data);
       }
       break;
+    }
 
     case 'agent_pick':
       await handleAgentPick(envelope, socket, data);
