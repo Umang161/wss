@@ -107,7 +107,7 @@ export interface HitlMessage {
   sender_id: string;
   sender_name: string;
   content: string;
-  is_from_user: boolean;
+  is_from_user: boolean | string;
   created_at: string;
 }
 
