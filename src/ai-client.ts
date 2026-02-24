@@ -16,11 +16,26 @@ export async function chatWithAi(
     config.aiRequestTimeoutMs
   );
 
+  // Merge profile_id (Supabase user id) into extra_data for tools like human_transfer
+  const body = {
+    user_input: request.user_input,
+    conversation_history: request.conversation_history,
+    chat_agent_id: request.chat_agent_id,
+    conversation_id: request.conversation_id,
+    extra_data: {
+      ...(request.extra_data ?? {}),
+      ...(request.profile_id && {
+        profile_id: request.profile_id,
+        user_profile_id: request.profile_id,
+      }),
+    },
+  };
+
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
 

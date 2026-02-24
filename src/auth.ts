@@ -64,6 +64,7 @@ async function verifySupabaseTokenViaApi(
     throw new Error(`Supabase auth failed: ${res.status} ${body}`);
   }
   const user = (await res.json()) as { id?: string; email?: string };
+  console.log('[Auth] Supabase /auth/v1/user response:', JSON.stringify(user, null, 2));
   const user_id = typeof user?.id === 'string' ? user.id : '';
   const email = typeof user?.email === 'string' ? user.email : '';
   if (!user_id) throw new Error('Invalid Supabase token: missing user id');
@@ -170,6 +171,7 @@ async function verifySupabaseToken(token: string): Promise<SocketContext> {
       });
       if (userRes.ok) {
         const u = (await userRes.json()) as { email?: string };
+        console.log('[Auth] Supabase /auth/v1/user response (email fetch):', JSON.stringify(u, null, 2));
         emailToUse = typeof u?.email === 'string' ? u.email : '';
       }
     }

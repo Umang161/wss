@@ -79,6 +79,9 @@ export interface AiChatRequest {
   conversation_history: Array<{ role: MessageRole; content: string }>;
   chat_agent_id: string;
   conversation_id: string;
+  /** Supabase auth user id - passed in extra_data for tools like human_transfer */
+  profile_id?: string;
+  extra_data?: Record<string, unknown>;
 }
 
 export interface AiChatResponse {

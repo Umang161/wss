@@ -356,6 +356,7 @@ async function handleUserMessage(
           conversation_history: state.messageHistory,
           chat_agent_id: state.chatAgentId,
           conversation_id: cid,
+          profile_id: ctx.user_id,
         });
 
         state.messageHistory.push({
