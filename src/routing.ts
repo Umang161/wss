@@ -118,11 +118,15 @@ export async function pushAgentClaimedSessions(
             });
           }
         }
-        const hitlMessages = (session.messages ?? []).map((m) => ({
-          id: m.id,
-          role: (m.is_from_user ? 'user' : 'human_agent') as MessageRole,
-          content: m.content,
-        }));
+        const hitlMessages = (session.messages ?? []).map((m) => {
+          const isFromUser =
+            m.is_from_user === true || m.is_from_user === 'true';
+          return {
+            id: m.id,
+            role: (isFromUser ? 'user' : 'human_agent') as MessageRole,
+            content: m.content,
+          };
+        });
         const messages = [...preHandoff, ...hitlMessages];
 
         send(socket, {
@@ -523,11 +527,15 @@ async function handleSessionHistoryRequest(
 
   try {
     const session = await getHitlSession(cid, token);
-    const messages = (session.messages || []).map((m) => ({
-      id: m.id,
-      role: (m.is_from_user ? 'user' : 'human_agent') as MessageRole,
-      content: m.content,
-    }));
+    const messages = (session.messages || []).map((m) => {
+      const isFromUser =
+        m.is_from_user === true || m.is_from_user === 'true';
+      return {
+        id: m.id,
+        role: (isFromUser ? 'user' : 'human_agent') as MessageRole,
+        content: m.content,
+      };
+    });
 
     send(socket, {
       type: 'session_history',
@@ -589,11 +597,15 @@ async function handleAgentPick(
     if (!seenHuman) preHandoff.push(m);
     else hitlFromMem.push(m);
   }
-  const hitlFromCrud = (session.messages || []).map((m) => ({
-    id: m.id,
-    role: (m.is_from_user ? 'user' : 'human_agent') as MessageRole,
-    content: m.content,
-  }));
+  const hitlFromCrud = (session.messages || []).map((m) => {
+    const isFromUser =
+      m.is_from_user === true || m.is_from_user === 'true';
+    return {
+      id: m.id,
+      role: (isFromUser ? 'user' : 'human_agent') as MessageRole,
+      content: m.content,
+    };
+  });
   const hitlMessages =
     hitlFromCrud.length > 0
       ? hitlFromCrud

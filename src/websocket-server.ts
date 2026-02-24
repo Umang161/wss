@@ -101,6 +101,10 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
         }
         try {
           const context = await verifyAndDecode(token);
+          // Chat users (Supabase): allow optional tenant_id from embed when token has none
+          if (context.role === 'user' && !context.tenant_id && typeof payload.tenant_id === 'string' && payload.tenant_id.trim()) {
+            context.tenant_id = payload.tenant_id.trim();
+          }
           data.authState = 'AUTHENTICATED';
           data.context = context;
           data.token = token;

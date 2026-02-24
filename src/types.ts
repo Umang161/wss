@@ -42,6 +42,8 @@ export interface EventEnvelope<T = unknown> {
 
 export interface AuthPayload {
   token: string;
+  /** Optional workspace ID for chat users (Supabase). Embed can pass from agent config when known. */
+  tenant_id?: string;
 }
 
 export interface SocketContext {
