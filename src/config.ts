@@ -16,6 +16,10 @@ export const config = {
 
   /** Timeout in ms for AI HTTP calls. */
   aiRequestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS) || 30_000,
+  /** Max buffered SSE chunk data before aborting stream parse. */
+  aiSseMaxBufferBytes: Number(process.env.AI_SSE_MAX_BUFFER_BYTES) || 256_000,
+  /** Max size of a single SSE event data block. */
+  aiSseMaxEventBytes: Number(process.env.AI_SSE_MAX_EVENT_BYTES) || 128_000,
 
   /** Base URL of the CRUD / HITL backend API (no trailing slash). */
   crudServerAddress: process.env.CRUD_SERVER_ADDRESS || 'https://api.zoft.ai',
@@ -34,4 +38,9 @@ export const config = {
 
   /** Supabase JWT secret (from Project Settings > API). Required for legacy Supabase projects where JWKS returns empty keys. */
   supabaseJwtSecret: process.env.SUPABASE_JWT_SECRET,
+
+  /** Max accepted WebSocket frame bytes from clients. */
+  wsMaxPayloadBytes: Number(process.env.WS_MAX_PAYLOAD_BYTES) || 64_000,
+  /** Max chat message length accepted from user/agent payloads. */
+  wsMaxMessageChars: Number(process.env.WS_MAX_MESSAGE_CHARS) || 8_000,
 } as const;

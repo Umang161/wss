@@ -13,6 +13,8 @@ const SEND: Record<EventType, Role[]> = {
   message_send:                ['user', 'human_agent'],
   message_receive:             [],
   ai_thinking:                 [],
+  ai_stream_event:             [],
+  ai_stream_end:               [],
   conversation_queued:         [],
   conversation_picked:         [],
   conversation_status_update:  [],

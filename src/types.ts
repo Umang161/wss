@@ -17,6 +17,8 @@ export type EventType =
   | 'message_send'
   | 'message_receive'
   | 'ai_thinking'
+  | 'ai_stream_event'
+  | 'ai_stream_end'
   | 'conversation_queued'
   | 'conversation_picked'
   | 'conversation_status_update'

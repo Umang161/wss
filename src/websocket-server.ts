@@ -23,7 +23,10 @@ const server = http.createServer((req, res) => {
   res.end('OK');
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: config.wsMaxPayloadBytes,
+});
 
 type ExtendedWebSocket = WebSocket & { isAlive?: boolean; data?: SocketData };
 

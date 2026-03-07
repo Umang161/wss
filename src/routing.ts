@@ -9,7 +9,8 @@
  */
 import type { WebSocket } from 'ws';
 import type { EventEnvelope, SocketData, SocketContext, MessageRole } from './types';
-import { chatWithAi } from './ai-client';
+import { chatWithAi, chatWithAiStream } from './ai-client';
+import { config } from './config';
 import {
   acceptHitlSession,
   endHitlSession,
@@ -50,6 +51,10 @@ const humanAgentSockets = new Map<WebSocket, SocketContext>();
 
 /** Reverse: socket → conversation_ids (for cleanup on disconnect). */
 const socketConversationIds = new Map<WebSocket, Set<string>>();
+
+/** conversation_id → active AI stream abort controller. */
+const activeAiStreams = new Map<string, AbortController>();
+const CONVERSATION_ID_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/;
 
 // ── Registry helpers ────────────────────────────────────────────────
 
@@ -163,6 +168,11 @@ export function onSocketClose(socket: WebSocket): void {
     for (const cid of ids) {
       if (userSockets.get(cid) === socket) userSockets.delete(cid);
       if (agentConversations.get(cid) === socket) agentConversations.delete(cid);
+      const activeStream = activeAiStreams.get(cid);
+      if (activeStream) {
+        activeStream.abort();
+        activeAiStreams.delete(cid);
+      }
     }
   }
   socketConversationIds.delete(socket);
@@ -172,7 +182,11 @@ export function onSocketClose(socket: WebSocket): void {
 
 function send(ws: WebSocket, envelope: EventEnvelope): void {
   if (ws.readyState !== 1) return;
-  ws.send(JSON.stringify(envelope));
+  try {
+    ws.send(JSON.stringify(envelope));
+  } catch (err) {
+    console.warn('[WS send] Failed to send envelope', envelope.type, err);
+  }
 }
 
 /** Send event to all human_agent dashboards for the given workspace. */
@@ -223,6 +237,34 @@ function sendError(
       ? { conversation_id: conversationId, ts: Date.now() }
       : { ts: Date.now() },
   });
+}
+
+function isValidConversationId(value: unknown): value is string {
+  return typeof value === 'string' && CONVERSATION_ID_PATTERN.test(value);
+}
+
+function normalizeAgentId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 128) return null;
+  return trimmed;
+}
+
+function extractMessageText(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const message = (payload as Record<string, unknown>).message;
+  if (typeof message !== 'string') return null;
+  const trimmed = message.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > config.wsMaxMessageChars) return null;
+  return trimmed;
+}
+
+function canUserAccessConversation(
+  state: ConversationState,
+  ctx: SocketContext,
+): boolean {
+  return state.userId === ctx.user_id && state.workspaceId === ctx.tenant_id;
 }
 
 // ── Conversation state helpers ──────────────────────────────────────
@@ -279,6 +321,8 @@ export async function handleEvent(
         state.assignedAgentId === ctx.user_id;
       if (isAgentInActiveHitl) {
         await handleAgentMessage(envelope, socket, data);
+      } else if (ctx.role === 'human_agent') {
+        sendError(socket, 'Human agents can send messages only in accepted HITL sessions', cid);
       } else {
         await handleUserMessage(envelope, socket, data);
       }
@@ -316,23 +360,39 @@ async function handleUserMessage(
   const ctx = data.context!;
   const token = data.token!;
   const cid = envelope.meta?.conversation_id;
-  if (!cid) {
-    sendError(socket, 'conversation_id is required in meta');
+  if (!isValidConversationId(cid)) {
+    sendError(socket, 'Valid conversation_id is required in meta');
     return;
   }
 
-  registerUserSocket(cid, socket);
+  const existingState = conversationStates.get(cid);
+  if (existingState && !canUserAccessConversation(existingState, ctx)) {
+    sendError(socket, 'Unauthorized conversation access', cid);
+    return;
+  }
 
   const state = getOrCreateState(cid, ctx.tenant_id, ctx.user_id);
   await syncStateIfNeeded(state, cid, token);
 
-  const agentId = envelope.meta?.agent_id as string | undefined;
-  if (agentId) state.chatAgentId = agentId;
+  const requestedAgentId = normalizeAgentId(envelope.meta?.agent_id);
+  if (requestedAgentId) {
+    if (state.chatAgentId && state.chatAgentId !== requestedAgentId) {
+      sendError(socket, 'agent_id cannot change for an existing conversation', cid);
+      return;
+    }
+    state.chatAgentId = requestedAgentId;
+  }
+  const content = extractMessageText(envelope.payload);
+  if (!content) {
+    sendError(
+      socket,
+      `payload.message is required and must be 1-${config.wsMaxMessageChars} characters`,
+      cid
+    );
+    return;
+  }
 
-  const content =
-    typeof (envelope.payload as Record<string, unknown>)?.message === 'string'
-      ? ((envelope.payload as Record<string, unknown>).message as string)
-      : JSON.stringify(envelope.payload);
+  registerUserSocket(cid, socket);
 
   state.messageHistory.push({ role: 'user', content });
 
@@ -351,25 +411,55 @@ async function handleUserMessage(
       });
 
       try {
-        const aiResponse = await chatWithAi({
+        const previousStream = activeAiStreams.get(cid);
+        if (previousStream) {
+          previousStream.abort();
+          activeAiStreams.delete(cid);
+        }
+
+        const streamAbortController = new AbortController();
+        activeAiStreams.set(cid, streamAbortController);
+
+        const aiResponse = await chatWithAiStream({
           user_input: content,
           conversation_history: state.messageHistory,
           chat_agent_id: state.chatAgentId,
           conversation_id: cid,
           profile_id: ctx.user_id,
+        }, {
+          signal: streamAbortController.signal,
+          onEvent: ({ event, data, rawData }) => {
+            if (event === 'done' || event === 'error') {
+              return;
+            }
+            send(socket, {
+              type: 'ai_stream_event',
+              version: 1,
+              payload: {
+                event,
+                data,
+                raw_data: rawData,
+              },
+              meta: { conversation_id: cid, ts: Date.now() },
+            });
+          },
         });
+
+        if (activeAiStreams.get(cid) === streamAbortController) {
+          activeAiStreams.delete(cid);
+        }
 
         state.messageHistory.push({
           role: 'ai_agent',
           content: aiResponse.response,
         });
-
         send(socket, {
-          type: 'message_receive',
+          type: 'ai_stream_end',
           version: 1,
           payload: {
-            message: aiResponse.response,
-            role: 'ai_agent',
+            response: aiResponse.response,
+            handoff: aiResponse.handoff,
+            handoff_reason: aiResponse.handoff_reason ?? null,
           },
           meta: { conversation_id: cid, ts: Date.now() },
         });
@@ -406,7 +496,14 @@ async function handleUserMessage(
       
         }
       } catch (err) {
+        const currentStream = activeAiStreams.get(cid);
+        if (currentStream) {
+          activeAiStreams.delete(cid);
+        }
         const msg = err instanceof Error ? err.message : 'AI request failed';
+        if (msg === 'AI API request aborted') {
+          return;
+        }
         sendError(socket, msg, cid);
       }
       break;
@@ -461,8 +558,8 @@ async function handleAgentMessage(
   const ctx = data.context!;
   const token = data.token!;
   const cid = envelope.meta?.conversation_id;
-  if (!cid) {
-    sendError(socket, 'conversation_id is required in meta');
+  if (!isValidConversationId(cid)) {
+    sendError(socket, 'Valid conversation_id is required in meta');
     return;
   }
 
@@ -480,10 +577,15 @@ async function handleAgentMessage(
     return;
   }
 
-  const content =
-    typeof (envelope.payload as Record<string, unknown>)?.message === 'string'
-      ? ((envelope.payload as Record<string, unknown>).message as string)
-      : JSON.stringify(envelope.payload);
+  const content = extractMessageText(envelope.payload);
+  if (!content) {
+    sendError(
+      socket,
+      `payload.message is required and must be 1-${config.wsMaxMessageChars} characters`,
+      cid
+    );
+    return;
+  }
 
   state.messageHistory.push({ role: 'human_agent', content });
 
@@ -517,8 +619,8 @@ async function handleSessionHistoryRequest(
 ): Promise<void> {
   const token = data.token!;
   const cid = envelope.meta?.conversation_id;
-  if (!cid) {
-    sendError(socket, 'conversation_id is required in meta');
+  if (!isValidConversationId(cid)) {
+    sendError(socket, 'Valid conversation_id is required in meta');
     return;
   }
 
@@ -560,8 +662,8 @@ async function handleAgentPick(
   const ctx = data.context!;
   const token = data.token!;
   const cid = envelope.meta?.conversation_id;
-  if (!cid) {
-    sendError(socket, 'conversation_id is required in meta');
+  if (!isValidConversationId(cid)) {
+    sendError(socket, 'Valid conversation_id is required in meta');
     return;
   }
 
@@ -665,8 +767,8 @@ async function handleConversationComplete(
   const ctx = data.context!;
   const token = data.token!;
   const cid = envelope.meta?.conversation_id;
-  if (!cid) {
-    sendError(socket, 'conversation_id is required in meta');
+  if (!isValidConversationId(cid)) {
+    sendError(socket, 'Valid conversation_id is required in meta');
     return;
   }
 
