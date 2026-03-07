@@ -43,7 +43,8 @@ export interface EventEnvelope<T = unknown> {
 }
 
 export interface AuthPayload {
-  token: string;
+  /** Optional token; when omitted, socket is treated as anonymous chat user. */
+  token?: string;
   /** Optional workspace ID for chat users (Supabase). Embed can pass from agent config when known. */
   tenant_id?: string;
 }

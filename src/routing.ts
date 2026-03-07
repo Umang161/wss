@@ -267,6 +267,18 @@ function canUserAccessConversation(
   return state.userId === ctx.user_id && state.workspaceId === ctx.tenant_id;
 }
 
+function isAssignedAgentForAcceptedSession(
+  state: ConversationState | undefined,
+  ctx: SocketContext,
+): boolean {
+  return Boolean(
+    state &&
+      state.mode === 'accepted' &&
+      state.assignedAgentId &&
+      state.assignedAgentId === ctx.user_id,
+  );
+}
+
 // ── Conversation state helpers ──────────────────────────────────────
 
 function getOrCreateState(
@@ -315,14 +327,8 @@ export async function handleEvent(
     case 'message_send': {
       const cid = envelope.meta?.conversation_id;
       const state = cid ? conversationStates.get(cid) : undefined;
-      const isAgentInActiveHitl =
-        ctx.role === 'human_agent' &&
-        state?.mode === 'accepted' &&
-        state.assignedAgentId === ctx.user_id;
-      if (isAgentInActiveHitl) {
+      if (isAssignedAgentForAcceptedSession(state, ctx)) {
         await handleAgentMessage(envelope, socket, data);
-      } else if (ctx.role === 'human_agent') {
-        sendError(socket, 'Human agents can send messages only in accepted HITL sessions', cid);
       } else {
         await handleUserMessage(envelope, socket, data);
       }
@@ -358,7 +364,7 @@ async function handleUserMessage(
   data: SocketData,
 ): Promise<void> {
   const ctx = data.context!;
-  const token = data.token!;
+  const token = data.token;
   const cid = envelope.meta?.conversation_id;
   if (!isValidConversationId(cid)) {
     sendError(socket, 'Valid conversation_id is required in meta');
@@ -372,7 +378,7 @@ async function handleUserMessage(
   }
 
   const state = getOrCreateState(cid, ctx.tenant_id, ctx.user_id);
-  await syncStateIfNeeded(state, cid, token);
+  await syncStateIfNeeded(state, cid, token ?? '');
 
   const requestedAgentId = normalizeAgentId(envelope.meta?.agent_id);
   if (requestedAgentId) {
@@ -425,7 +431,9 @@ async function handleUserMessage(
           conversation_history: state.messageHistory,
           chat_agent_id: state.chatAgentId,
           conversation_id: cid,
-          profile_id: ctx.user_id,
+          // Anonymous sockets have no JWT context on downstream services,
+          // so do not forward a synthetic anon-* profile id to AI tools.
+          profile_id: token ? ctx.user_id : undefined,
         }, {
           signal: streamAbortController.signal,
           onEvent: ({ event, data, rawData }) => {
@@ -537,9 +545,15 @@ async function handleUserMessage(
           meta: { conversation_id: cid, ts: Date.now() },
         });
 
-        sendHitlMessage(cid, content, token).catch((err) => {
-          console.warn(`Failed to persist user message for ${cid}:`, err);
-        });
+        if (token) {
+          sendHitlMessage(cid, content, token).catch((err) => {
+            console.warn(`Failed to persist user message for ${cid}:`, err);
+          });
+        } else {
+          console.warn(
+            `[HITL] Skipped persisting user message for ${cid}: anonymous user has no auth token`,
+          );
+        }
       } else {
         sendError(socket, 'Agent is currently unavailable', cid);
       }
@@ -556,7 +570,11 @@ async function handleAgentMessage(
   data: SocketData,
 ): Promise<void> {
   const ctx = data.context!;
-  const token = data.token!;
+  const token = data.token;
+  if (!token) {
+    sendError(socket, 'Authenticated agent token is required');
+    return;
+  }
   const cid = envelope.meta?.conversation_id;
   if (!isValidConversationId(cid)) {
     sendError(socket, 'Valid conversation_id is required in meta');
@@ -617,7 +635,11 @@ async function handleSessionHistoryRequest(
   socket: WebSocket,
   data: SocketData,
 ): Promise<void> {
-  const token = data.token!;
+  const token = data.token;
+  if (!token) {
+    sendError(socket, 'Authenticated agent token is required');
+    return;
+  }
   const cid = envelope.meta?.conversation_id;
   if (!isValidConversationId(cid)) {
     sendError(socket, 'Valid conversation_id is required in meta');
@@ -660,7 +682,11 @@ async function handleAgentPick(
   data: SocketData,
 ): Promise<void> {
   const ctx = data.context!;
-  const token = data.token!;
+  const token = data.token;
+  if (!token) {
+    sendError(socket, 'Authenticated agent token is required');
+    return;
+  }
   const cid = envelope.meta?.conversation_id;
   if (!isValidConversationId(cid)) {
     sendError(socket, 'Valid conversation_id is required in meta');
@@ -765,7 +791,11 @@ async function handleConversationComplete(
   data: SocketData,
 ): Promise<void> {
   const ctx = data.context!;
-  const token = data.token!;
+  const token = data.token;
+  if (!token) {
+    sendError(socket, 'Authenticated agent token is required');
+    return;
+  }
   const cid = envelope.meta?.conversation_id;
   if (!isValidConversationId(cid)) {
     sendError(socket, 'Valid conversation_id is required in meta');

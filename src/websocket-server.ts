@@ -7,7 +7,7 @@ import http from 'http';
 import { config } from './config';
 import { verifyAndDecode } from './auth';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { EventEnvelope, AuthPayload, SocketData } from './types';
+import type { EventEnvelope, AuthPayload, SocketData, SocketContext } from './types';
 import { canSendEvent, isAllowedBeforeAuth } from './permissions';
 import {
   handleEvent,
@@ -43,6 +43,22 @@ function closeWithAuthError(ws: WebSocket, message: string): void {
     ? message.slice(0, 60) + '…'
     : message;
   ws.close(4001, reason);
+}
+
+function buildAnonymousContext(payload: AuthPayload): SocketContext {
+  const tenantId =
+    typeof payload?.tenant_id === 'string' ? payload.tenant_id.trim() : '';
+  return {
+    tenant_id: tenantId,
+    user_id: `anon-${Math.random().toString(36).slice(2, 12)}`,
+    role: 'user',
+    permissions: [],
+    authenticatedAt: Date.now(),
+  };
+}
+
+function hasTenantHint(payload: AuthPayload): boolean {
+  return typeof payload?.tenant_id === 'string' && Boolean(payload.tenant_id.trim());
 }
 
 // ── Connection handler ──────────────────────────────────────────────
@@ -96,20 +112,29 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
 
       if (envelope.type === 'auth') {
         const payload = envelope.payload as AuthPayload;
-        const token = payload?.token;
-        if (!token || typeof token !== 'string') {
-          closeWithAuthError(socket, 'Missing or invalid auth payload');
-          return;
-        }
+        const token =
+          typeof payload?.token === 'string' ? payload.token.trim() : '';
         try {
-          const context = await verifyAndDecode(token);
-          // Chat users (Supabase): allow optional tenant_id from embed when token has none
-          if (context.role === 'user' && !context.tenant_id && typeof payload.tenant_id === 'string' && payload.tenant_id.trim()) {
+          const context = token
+            ? await verifyAndDecode(token)
+            : buildAnonymousContext(payload);
+          // Chat users (Supabase/anonymous): allow optional tenant_id from embed when token has none
+          if (
+            context.role === 'user' &&
+            !context.tenant_id &&
+            typeof payload.tenant_id === 'string' &&
+            payload.tenant_id.trim()
+          ) {
             context.tenant_id = payload.tenant_id.trim();
+          }
+          // Embedded chat clients typically send tenant_id in auth payload.
+          // Treat them as chat users even when token workspace lookup is available.
+          if (token && hasTenantHint(payload) && context.role === 'human_agent') {
+            context.role = 'user';
           }
           data.authState = 'AUTHENTICATED';
           data.context = context;
-          data.token = token;
+          data.token = token || undefined;
 
           if (context.role === 'human_agent') {
             const tokenPreview = token.length > 50 ? `${token.slice(0, 30)}…${token.slice(-15)}` : token;
@@ -121,7 +146,8 @@ wss.on('connection', (socket: ExtendedWebSocket) => {
             // HITL GET disabled: no longer fetching claimed sessions on agent auth.
           } else if (context.role === 'user') {
             const wsList = context.tenant_id ? context.tenant_id : '(none)';
-            console.log(`[WS] Embedded chat (user) connected: socketId=${data.socketId ?? '?'} workspace=${wsList}`);
+            const mode = token ? 'embedded chat (user)' : 'anonymous chat (user)';
+            console.log(`[WS] ${mode} connected: socketId=${data.socketId ?? '?'} workspace=${wsList}`);
           }
 
           const tenantId = context.tenant_id || (context.workspace_ids?.[0] as string | undefined) || '';
